@@ -1,0 +1,10 @@
+version: "3"
+services:
+  yolo:
+      build: .
+      command: sleep 1000000
+      ipc: host
+      volumes:
+        - /home/duck/sam-object-detection-challenge/data:/data:z
+        - ./:/yolov7
+      container_name: yolo_v7
