@@ -34,13 +34,18 @@ from utils.loss import ComputeLoss, ComputeLossOTA
 from utils.plots import plot_images, plot_labels, plot_results, plot_evolution
 from utils.torch_utils import ModelEMA, select_device, intersect_dicts, torch_distributed_zero_first, is_parallel
 from utils.wandb_logging.wandb_utils import WandbLogger, check_wandb_resume
+import loralib as lora
 
 logger = logging.getLogger(__name__)
 
-def save_model(model, filename,use_lora=False):
-    if(not use_lora):
-        torch.save(model, filename)
-    torch.save()
+def save_checkpoint(ckpt, filename, use_lora=False):
+    if(use_lora):
+        ckpt.model = lora.lora_state_dict(ckpt.model)
+        ckpt.optimizer = lora.lora_state_dict(ckpt.optimizer)
+        torch.save(ckpt, filename)
+
+    ckpt.optimizer = ckpt.optimizer.state_dict()
+    torch.save(ckpt, filename)
 
 def train(hyp, opt, device, tb_writer=None):
     logger.info(colorstr('hyperparameters: ') + ', '.join(f'{k}={v}' for k, v in hyp.items()))
@@ -287,13 +292,18 @@ def train(hyp, opt, device, tb_writer=None):
     # Model parameters
     hyp['box'] *= 3. / nl  # scale to layers
     hyp['cls'] *= nc / 80. * 3. / nl  # scale to classes and layers
-    hyp['obj'] *= (imgsz / 640) ** 2 * 3    torch.save(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch)). / nl  # scale to image size and layers
+    hyp['obj'] *= (imgsz / 640) ** 2 * 3
     hyp['label_smoothing'] = opt.label_smoothing
     model.nc = nc  # attach number of classes to model
     model.hyp = hyp  # attach hyperparameters to model
     model.gr = 1.0  # iou loss ratio (obj_loss = 1.0 or iou)
     model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc  # attach class weights
     model.names = names
+
+    #LoRA
+    if(opt.lora):
+        lora.mark_only_lora_as_trainable(model)
+
 
     # Start training
     t0 = time.time()
@@ -309,7 +319,8 @@ def train(hyp, opt, device, tb_writer=None):
                 f'Using {dataloader.num_workers} dataloader workers\n'
                 f'Logging results to {save_dir}\n'
                 f'Starting training for {epochs} epochs...')
-    save_model(model, wdir / 'init.pt', opt.lora)
+
+    torch.save(model, wdir / 'init.pt')
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         model.train()
 
@@ -463,21 +474,21 @@ def train(hyp, opt, device, tb_writer=None):
                         'model': deepcopy(model.module if is_parallel(model) else model).half(),
                         'ema': deepcopy(ema.ema).half(),
                         'updates': ema.updates,
-                        'optimizer': optimizer.state_dict(),
+                        'optimizer': optimizer,
                         'wandb_id': wandb_logger.wandb_run.id if wandb_logger.wandb else None}
 
                 # Save last, best and delete
-                save_model(ckpt, last, opt.lora)
+                save_checkpoint(ckpt, last, opt.lora)
                 if best_fitness == fi:
-                    save_model(ckpt, best, opt.lora)
+                    save_checkpoint(ckpt, best, opt.lora)
                 if (best_fitness == fi) and (epoch >= 200):
-                    save_model(ckpt, wdir / 'best_{:03d}.pt'.format(epoch), opt.lora)
+                    save_checkpoint(ckpt, wdir / 'best_{:03d}.pt'.format(epoch), opt.lora)
                 if epoch == 0:
-                    save_model(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch), opt.lora)
+                    save_checkpoint(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch), opt.lora)
                 elif ((epoch+1) % 25) == 0:
-                    save_model(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch), opt.lora)
+                    save_checkpoint(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch), opt.lora)
                 elif epoch >= (epochs-5):
-                    save_model(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch), opt.lora)
+                    save_checkpoint(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch), opt.lora)
                 if wandb_logger.wandb:
                     if ((epoch + 1) % opt.save_period == 0 and not final_epoch) and opt.save_period != -1:
                         wandb_logger.log_model(
@@ -569,7 +580,7 @@ if __name__ == '__main__':
     parser.add_argument('--artifact_alias', type=str, default="latest", help='version of dataset artifact to be used')
     parser.add_argument('--freeze', nargs='+', type=int, default=[0], help='Freeze layers: backbone of yolov7=50, first3=0 1 2')
     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
-    parser.add_argument('--lora', type=bool, help='use low rank adaptive fine tuning')
+    parser.add_argument('--lora', action='store_true', help='use low rank adaptive fine tuning')
     opt = parser.parse_args()
 
     if(opt.lora and opt.weights == ''):
