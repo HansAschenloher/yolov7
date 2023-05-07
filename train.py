@@ -37,6 +37,10 @@ from utils.wandb_logging.wandb_utils import WandbLogger, check_wandb_resume
 
 logger = logging.getLogger(__name__)
 
+def save_model(model, filename,use_lora=False):
+    if(not use_lora):
+        torch.save(model, filename)
+    torch.save()
 
 def train(hyp, opt, device, tb_writer=None):
     logger.info(colorstr('hyperparameters: ') + ', '.join(f'{k}={v}' for k, v in hyp.items()))
@@ -283,7 +287,7 @@ def train(hyp, opt, device, tb_writer=None):
     # Model parameters
     hyp['box'] *= 3. / nl  # scale to layers
     hyp['cls'] *= nc / 80. * 3. / nl  # scale to classes and layers
-    hyp['obj'] *= (imgsz / 640) ** 2 * 3. / nl  # scale to image size and layers
+    hyp['obj'] *= (imgsz / 640) ** 2 * 3    torch.save(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch)). / nl  # scale to image size and layers
     hyp['label_smoothing'] = opt.label_smoothing
     model.nc = nc  # attach number of classes to model
     model.hyp = hyp  # attach hyperparameters to model
@@ -305,7 +309,7 @@ def train(hyp, opt, device, tb_writer=None):
                 f'Using {dataloader.num_workers} dataloader workers\n'
                 f'Logging results to {save_dir}\n'
                 f'Starting training for {epochs} epochs...')
-    torch.save(model, wdir / 'init.pt')
+    save_model(model, wdir / 'init.pt', opt.lora)
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         model.train()
 
@@ -463,17 +467,17 @@ def train(hyp, opt, device, tb_writer=None):
                         'wandb_id': wandb_logger.wandb_run.id if wandb_logger.wandb else None}
 
                 # Save last, best and delete
-                torch.save(ckpt, last)
+                save_model(ckpt, last, opt.lora)
                 if best_fitness == fi:
-                    torch.save(ckpt, best)
+                    save_model(ckpt, best, opt.lora)
                 if (best_fitness == fi) and (epoch >= 200):
-                    torch.save(ckpt, wdir / 'best_{:03d}.pt'.format(epoch))
+                    save_model(ckpt, wdir / 'best_{:03d}.pt'.format(epoch), opt.lora)
                 if epoch == 0:
-                    torch.save(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch))
+                    save_model(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch), opt.lora)
                 elif ((epoch+1) % 25) == 0:
-                    torch.save(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch))
+                    save_model(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch), opt.lora)
                 elif epoch >= (epochs-5):
-                    torch.save(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch))
+                    save_model(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch), opt.lora)
                 if wandb_logger.wandb:
                     if ((epoch + 1) % opt.save_period == 0 and not final_epoch) and opt.save_period != -1:
                         wandb_logger.log_model(
@@ -565,7 +569,11 @@ if __name__ == '__main__':
     parser.add_argument('--artifact_alias', type=str, default="latest", help='version of dataset artifact to be used')
     parser.add_argument('--freeze', nargs='+', type=int, default=[0], help='Freeze layers: backbone of yolov7=50, first3=0 1 2')
     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
+    parser.add_argument('--lora', type=bool, help='use low rank adaptive fine tuning')
     opt = parser.parse_args()
+
+    if(opt.lora and opt.weights == ''):
+        raise parser.error("LoRA is only for fine tuning, please specify the pretrained weights")
 
     # Set DDP variables
     opt.world_size = int(os.environ['WORLD_SIZE']) if 'WORLD_SIZE' in os.environ else 1
@@ -677,6 +685,7 @@ if __name__ == '__main__':
                     x = x[random.choices(range(n), weights=w)[0]]  # weighted selection
                 elif parent == 'weighted':
                     x = (x * w.reshape(n, 1)).sum(0) / w.sum()  # weighted combination
+
 
                 # Mutate
                 mp, s = 0.8, 0.2  # mutation probability, sigma
