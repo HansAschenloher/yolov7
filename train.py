@@ -40,11 +40,11 @@ logger = logging.getLogger(__name__)
 
 def save_checkpoint(ckpt, filename, use_lora=False):
     if(use_lora):
-        ckpt.model = lora.lora_state_dict(ckpt.model)
-        ckpt.optimizer = lora.lora_state_dict(ckpt.optimizer)
+        ckpt['model'] = lora.lora_state_dict(ckpt.get('model'))
+        ckpt['optimizer'] = lora.lora_state_dict(ckpt.get('optimizer'))
         torch.save(ckpt, filename)
 
-    ckpt.optimizer = ckpt.optimizer.state_dict()
+    ckpt['optimizer'] = ckpt.get('optimizer').state_dict()
     torch.save(ckpt, filename)
 
 def train(hyp, opt, device, tb_writer=None):
@@ -114,6 +114,12 @@ def train(hyp, opt, device, tb_writer=None):
         if any(x in k for x in freeze):
             print('freezing %s' % k)
             v.requires_grad = False
+        if (opt.lora and k.find('lora') == -1):
+                print('freezing %s' % k)
+                v.requires_grad = False
+    #LoRA
+    #if(opt.lora):
+    #    lora.mark_only_lora_as_trainable(model)
 
     # Optimizer
     nbs = 64  # nominal batch size
@@ -129,6 +135,10 @@ def train(hyp, opt, device, tb_writer=None):
             pg0.append(v.weight)  # no decay
         elif hasattr(v, 'weight') and isinstance(v.weight, nn.Parameter):
             pg1.append(v.weight)  # apply decay
+        elif hasattr(v, 'lora_A') and isinstance(v.weight, nn.Parameter):
+            pg0.append(v.weight)  # no decay
+        elif hasattr(v, 'lora_A') and isinstance(v.weight, nn.Parameter):
+            pg0.append(v.weight)  # no decay
         if hasattr(v, 'im'):
             if hasattr(v.im, 'implicit'):           
                 pg0.append(v.im.implicit)
@@ -299,11 +309,6 @@ def train(hyp, opt, device, tb_writer=None):
     model.gr = 1.0  # iou loss ratio (obj_loss = 1.0 or iou)
     model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc  # attach class weights
     model.names = names
-
-    #LoRA
-    if(opt.lora):
-        lora.mark_only_lora_as_trainable(model)
-
 
     # Start training
     t0 = time.time()

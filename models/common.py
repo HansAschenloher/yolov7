@@ -16,6 +16,7 @@ from utils.datasets import letterbox
 from utils.general import non_max_suppression, make_divisible, scale_coords, increment_path, xyxy2xywh
 from utils.plots import color_list, plot_one_box
 from utils.torch_utils import time_synchronized
+import loralib as lora
 
 
 ##### basic ####
@@ -95,6 +96,18 @@ class Foldcut(nn.Module):
         x1, x2 = x.chunk(2, self.d)
         return x1+x2
 
+class LoraConv(nn.Module):
+    def __init__(self, c1, c2, k=1, s=1, padding=None, group=1, act=True, r=16):
+        super(LoraConv, self).__init__()
+        self.conv = lora.Conv2d(c1, c2, k, r)
+        self.bn = nn.BatchNorm2d(c2)
+        self.act = nn.SiLU() if act is True else (act if isinstance(act, nn.Module) else nn.Identity())
+
+    def forward(self, x):
+        return self.act(self.bn(self.conv(x)))
+
+    def fuseforward(self, x):
+        return self.act(self.conv(x))
 
 class Conv(nn.Module):
     # Standard convolution
