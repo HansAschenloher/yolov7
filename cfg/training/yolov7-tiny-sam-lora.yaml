@@ -102,11 +102,11 @@ head:
    [-1, 1, Conv, [128, 3, 1, None, 1, nn.LeakyReLU(0.1)]],
    [-1, 1, Conv, [128, 3, 1, None, 1, nn.LeakyReLU(0.1)]],
    [[-1, -2, -3, -4], 1, Concat, [1]],
-   [-1, 1, Conv, [256, 1, 1, None, 1, nn.LeakyReLU(0.1)]],  # 73
+   [-1, 1, LoraConv, [256, 1, 1, None, 1, nn.LeakyReLU(0.1), 4]],  # 73
       
-   [57, 1, LoraConv, [128, 3, 1, None, 1, nn.LeakyReLU(0.1), 16]],
-   [65, 1, LoraConv, [256, 3, 1, None, 1, nn.LeakyReLU(0.1), 16]],
-   [73, 1, LoraConv, [512, 3, 1, None, 1, nn.LeakyReLU(0.1), 16]],
+   [57, 1, LoraConv, [128, 3, 1, None, 1, nn.LeakyReLU(0.1), 4]],
+   [65, 1, LoraConv, [256, 3, 1, None, 1, nn.LeakyReLU(0.1), 4]],
+   [73, 1, Conv, [512, 3, 1, None, 1, nn.LeakyReLU(0.1)]],
 
    [[74,75,76], 1, IDetect, [nc, anchors]],   # Detect(P3, P4, P5)
   ]
