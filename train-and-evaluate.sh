@@ -1,18 +1,18 @@
 NAME=yolov7
 
-TRAIN_DATA=/data/sam-colorless.yaml
-BENCHMARK_DATA=/data/sam_benchmark_reduced_colorless.yaml
+TRAIN_DATA=/data/training_data/data.yaml
+BENCHMARK_DATA=/data/sam_benchmark_copy.yaml
 
-CONFIG=cfg/training/yolov7-tiny-sam-colorless.yaml
+CONFIG=cfg/training/yolov7-tiny-sam.yaml
 HYPER_PARAMETERS=data/hyp.scratch.tiny.sam.yaml
 WEIGHTS=./yolov7-tiny.pt
-EPOCHS=100
+EPOCHS=150
 
 TIME=$(date -u +%Y-%m-%dT%H-%M)
 NAME=$NAME_$TIME
-python train.py --workers 8 --device 0 --batch-size 32 \
+python train.py --workers 8 --device 0 --batch-size 8 \
 	  --data $TRAIN_DATA \
-	  --img 224 224 \
+	  --img 320 320 \
 	  --cfg $CONFIG \
 	  --weights $WEIGHTS \
 	  --name $NAME \
@@ -23,8 +23,8 @@ python train.py --workers 8 --device 0 --batch-size 32 \
 mkdir /tmp/results
 cp runs/train/$NAME/weights/best.pt /tmp/results/yolov7.pt
 python test.py --data $BENCHMARK_DATA \
-  --img 224 \
-  --batch 32 \
+  --img 320 \
+  --batch 8 \
   --conf 0.001 \
   --iou 0.65 \
   --device 0 \
@@ -36,6 +36,7 @@ cp -r runs/test/$NAME /tmp/results/benchmark
 cp $HYPER_PARAMETERS /tmp/results/
 cp $TRAIN_DATA /tmp/results/
 cp $BENCHMARK_DATA /tmp/results/
+cp train.py /tmp/results/
 
 tar czf $NAME.tar.gz --directory=/tmp/results/ .
 rm -rf /tmp/results
