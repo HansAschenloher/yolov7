@@ -28,6 +28,7 @@ def test(data,
          single_cls=False,
          augment=False,
          verbose=False,
+         filter_classes=False,
          model=None,
          dataloader=None,
          save_dir=Path(''),  # for saving images
@@ -40,7 +41,8 @@ def test(data,
          half_precision=True,
          trace=False,
          is_coco=False,
-         v5_metric=False):
+         v5_metric=False
+        ):
     # Initialize/load model and set device
     training = model is not None
     if training:  # called by train.py
@@ -124,9 +126,23 @@ def test(data,
             t = time_synchronized()
             out = non_max_suppression(out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb, multi_label=True)
             t1 += time_synchronized() - t
+            
+            
+            if filter_classes:
+                classes = [0,2,9]
+                # print("out before filter: ", len(out), out[0].shape)
+                values_to_include = torch.tensor(classes, device=device) # opt.classes, classes should be of type: [1,4,9]
+                for idx, element in enumerate(out):
+                    # Create a mask that is True where the last column of pred_new is in values_to_include
+                    mask = torch.isin(element[:, 5], values_to_include)
+                    # Use the mask to select the rows of pred_new where the last column is in values_to_include
+                    out[idx] = element[mask]
 
         # Statistics per image
         for si, pred in enumerate(out):
+            #print("out: ", out[0].shape)
+            #print("si", si)
+            #print("pred", pred.shape)
             labels = targets[targets[:, 0] == si, 1:]
             nl = len(labels)
             tcls = labels[:, 0].tolist() if nl else []  # target class
@@ -286,7 +302,6 @@ def test(data,
         maps[c] = ap[i]
     return (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist()), maps, t
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='test.py')
     parser.add_argument('--weights', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
@@ -300,6 +315,7 @@ if __name__ == '__main__':
     parser.add_argument('--single-cls', action='store_true', help='treat as single-class dataset')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument('--verbose', action='store_true', help='report mAP by class')
+    parser.add_argument('--filter-classes', action='store_true', help='Only predict person, car, traffic light')
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-hybrid', action='store_true', help='save label+prediction hybrid results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
@@ -313,6 +329,7 @@ if __name__ == '__main__':
     opt.save_json |= opt.data.endswith('coco.yaml')
     opt.data = check_file(opt.data)  # check file
     print(opt)
+    print(opt.data)
     #check_requirements()
 
     if opt.task in ('train', 'val', 'test'):  # run normally
@@ -326,6 +343,7 @@ if __name__ == '__main__':
              opt.single_cls,
              opt.augment,
              opt.verbose,
+             opt.filter_classes,
              save_txt=opt.save_txt | opt.save_hybrid,
              save_hybrid=opt.save_hybrid,
              save_conf=opt.save_conf,
@@ -351,3 +369,5 @@ if __name__ == '__main__':
             np.savetxt(f, y, fmt='%10.4g')  # save
         os.system('zip -r study.zip study_*.txt')
         plot_study_txt(x=x)  # plot
+
+

@@ -89,7 +89,21 @@ def detect(save_img=False):
         t2 = time_synchronized()
 
         # Apply NMS
-        pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms)
+        pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres, agnostic=opt.agnostic_nms) # classes=opt.classes,
+        
+        # Create a tensor on the same device as pred_new
+        
+        if opt.classes:
+            values_to_include = torch.tensor(opt.classes, device=device) # opt.classes, classes should be of type: [1,4,9]
+            for idx, element in enumerate(pred):
+                # Create a mask that is True where the last column of pred_new is in values_to_include
+                mask = torch.isin(element[:, 5], values_to_include)
+                # Use the mask to select the rows of pred_new where the last column is in values_to_include
+                pred[idx] = element[mask]
+
+
+        # pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres, classes=[1,4,10], agnostic=opt.agnostic_nms)
+        # Only detect person: 1, car: 4, traffic light: 10
         t3 = time_synchronized()
 
         # Apply Classifier
@@ -161,7 +175,6 @@ def detect(save_img=False):
         #print(f"Results saved to {save_dir}{s}")
 
     print(f'Done. ({time.time() - t0:.3f}s)')
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
